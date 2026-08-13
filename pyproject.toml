@@ -17,7 +17,7 @@ classifiers = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/JeanTheMan/winotes-cli"
+Homepage = "https://github.com/zhuobichen/winnote-cli"
 
 [project.scripts]
 wn = "winotes_cli:main"
