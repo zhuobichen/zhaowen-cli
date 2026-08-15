@@ -164,8 +164,8 @@ def main():
     p_update.add_argument("-t", "--text", help="New text content")
     p_update.add_argument("-f", "--file", help="Read new content from file")
     p_update.add_argument("--theme", choices=sorted(THEMES), help="Change theme")
-    p_update.add_argument("--open", type=lambda x: x.lower() == "true", help="Set open state (true/false)")
-    p_update.add_argument("--on-top", type=lambda x: x.lower() == "true", help="Set always-on-top (true/false)")
+    p_update.add_argument("--open", action=argparse.BooleanOptionalAction, default=None, help="Set open state (use --no-open to unset)")
+    p_update.add_argument("--on-top", action=argparse.BooleanOptionalAction, default=None, help="Set always-on-top (use --no-on-top to unset)")
     p_update.add_argument("--pretty", action="store_true", help="Pretty-print JSON")
     p_update.set_defaults(func=cmd_update)
 
