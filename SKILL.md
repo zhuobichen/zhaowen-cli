@@ -164,6 +164,21 @@ python <脚本> restore          # 一条命令，不用再取证
 > **窗口隔离**：`--window new` 用 `wt -w new` 给每个会话开**独立窗口**，关一扇不会
 > 带走其它会话；默认仍是 `-w 0`（同一窗口多标签，手感熟悉但有连坐风险）。
 
+> **两个已修的语义坑（2026-10-18 实测）**：
+> 1. **`snapshot` 必须是「覆盖」，不是「追加」**。原先 `record_open` 一律合并，导致
+>    `snapshot` 打印"此刻 10 个"、文件里却残留 14 条旧条目，`restore` 照着文件把
+>    4 个**不在快照里**的会话（2 个 Codex + 豆包 + 1 个 Claude）也开了。
+>    现在 `snapshot` / `shutdown` 走 `replace=True`（清单 = 此刻开着的），
+>    `resume-cmd` / `restore` 才用增量合并。
+> 2. **判定不了"谁在跑"时必须停手**。枚举 `claude.exe` 走 PowerShell，一次开十几个
+>    会话会超时；旧逻辑把"超时"当成"一个都没开"，于是 `restore` 连**当前会话**都
+>    重开了一份。现在 `alive_session_ids()` 失败返回 `None`（≠空集合），`restore`
+>    遇到 `None` 直接停手并提示加 `--all` 明确确认。
+>
+> 另注：**会话"活着"但还没写 `~/.claude/sessions/<pid>.json` 时，skill 看不见它**
+> （大转录 resume 得慢会出现这种情况）。此时 `snapshot` 会把它漏掉，`open-list` 会
+> 显示「已关闭」——以终端里实际开着的为准。
+
 ### 3.7 「我的 Codex 会话不见了」—— 索引对账（codex-index）
 **踩过的坑（2026-10-13）**：用户在 Codex 界面里找不到一个在用的会话（"数据融合远程"，
 `E:\CodeProject\server_manager`，插值前/后对比绘图）。文件其实**完好**——问题是

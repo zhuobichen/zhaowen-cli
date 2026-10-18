@@ -184,8 +184,15 @@ def open_taken_at():
         return ""
 
 
-def record_open(recs, window="tab"):
+def record_open(recs, window="tab", replace=False):
     """把会话记入清单：按 id 去重、最近在前、超出 MAX_OPEN 截断。
+
+    `replace=True` = **真快照**：清单被这批会话整体覆盖（snapshot / shutdown 用）。
+    `replace=False` = 增量合并（resume-cmd / restore 用，只累加不删旧条目）。
+
+    ⚠️ 2026-10-18 踩过的坑：原来一律合并，导致 `snapshot` 打的是"此刻 10 个"、
+    文件里却留着 14 个旧条目，`restore` 读文件就多开了 4 个（含 Codex 和豆包）。
+    快照必须是**覆盖**语义，否则"快照"名不副实。
 
     每条同时留两个时间：`openedAt` = **首次**打开时间（重复记录不覆盖），
     `snapshotAt` = 本次记录时间；文件头 `takenAt` = 本清单最后写入时间。
@@ -203,6 +210,9 @@ def record_open(recs, window="tab"):
             "snapshotAt": now_iso(),
             "window": window,
         })
+    if replace:
+        save_open(entries)
+        return entries
     new_ids = {e["id"] for e in entries}
     kept = [s for s in load_open() if s["id"] not in new_ids]
     save_open(entries + kept)
@@ -210,11 +220,29 @@ def record_open(recs, window="tab"):
 
 
 def alive_session_ids():
-    """当前活着的 Claude 会话 id 集合（进程 ∩ ~/.claude/sessions/<pid>.json）"""
+    """当前活着的 Claude 会话 id 集合（进程 ∩ ~/.claude/sessions/<pid>.json）。
+
+    ⚠️ **查询失败返回 None，而不是空集合**。枚举 claude.exe 走 PowerShell，
+    机器繁忙（比如一次开十几个会话）时会超时；若当成"一个都没开"，restore 就会
+    把全部会话重开一遍 —— 2026-10-18 实测踩过（连当前会话都被重开了一份）。
+    """
     try:
-        return {s["sessionId"] for s in _cached_running_claude()}
+        pids = _cached_claude_pids()
     except Exception:
-        return set()
+        return None
+    if not pids:
+        return None                      # 枚举失败/超时，状态未知
+    sdir = HOME / ".claude" / "sessions"
+    ids = set()
+    if sdir.is_dir():
+        for f in sdir.glob("*.json"):
+            try:
+                d = json.loads(f.read_text(encoding="utf-8"))
+            except Exception:
+                continue
+            if d.get("pid") in pids and d.get("sessionId"):
+                ids.add(d["sessionId"])
+    return ids
 
 
 # ---------------------------------------------------------------------------
@@ -909,6 +937,12 @@ def restore_sessions(only_missing=True, window="tab", dry_run=False):
     records = scan_all(None)
     by_id = {r["id"]: r for r in records}
     alive = alive_session_ids()
+    if alive is None and only_missing:
+        print("⚠ 无法确认哪些会话还在运行（枚举 claude.exe 失败或超时）。")
+        print("  为避免把已经开着的会话再开一遍，已停手。")
+        print("  确认要把清单里的会话全部重开请显式加 --all。")
+        return
+    alive = alive or set()
     todo, skipped, missing, nogui = [], [], [], []
     for e in entries:
         sid = e["id"]
@@ -1094,8 +1128,8 @@ def snapshot_open():
     titles = {r["id"]: r.get("title", "") for r in scan_all("claude")}
     recs = [{"id": s["sessionId"], "agent": "claude", "cwd": s["cwd"],
              "title": titles.get(s["sessionId"], "")} for s in sessions]
-    entries = record_open(recs)
-    print(f"快照时间: {open_taken_at()}    共 {len(entries)} 个会话")
+    entries = record_open(recs, replace=True)      # 真快照：覆盖旧清单
+    print(f"快照时间: {open_taken_at()}    共 {len(entries)} 个会话（清单已按此刻覆盖）")
     print(f"清单文件: {OPEN_FILE}\n")
     for e in entries:
         print(f"  {e['id'][:8]}  {e['cwd']}")
@@ -1123,8 +1157,9 @@ def shutdown_claude(force=False):
     # 关之前先把"当前开着哪些"存成清单 —— 之后 `restore` 一条命令全开回来
     titles = {r["id"]: r.get("title", "") for r in scan_all("claude")}
     record_open([{"id": s["sessionId"], "agent": "claude", "cwd": s["cwd"],
-                  "title": titles.get(s["sessionId"], "")} for s in sessions])
-    print(f"\n已把这 {len(sessions)} 个会话记入清单: {OPEN_FILE}")
+                  "title": titles.get(s["sessionId"], "")} for s in sessions],
+                replace=True)      # 真快照：覆盖旧清单
+    print(f"\n已把这 {len(sessions)} 个会话记入清单（覆盖）: {OPEN_FILE}")
     try:
         subprocess.run(["taskkill", "/F", "/IM", "claude.exe"],
                        capture_output=True, timeout=30)
@@ -1623,16 +1658,20 @@ def main():
 
     if args.cmd == "open-list":
         entries = load_open()
-        alive = alive_session_ids()
+        alive = alive_session_ids()          # None = 查不出来（≠ 全都没开）
         if args.json:
-            print_json([{**e, "alive": e["id"] in alive} for e in entries])
+            print_json([{**e, "alive": (None if alive is None else e["id"] in alive)}
+                        for e in entries])
         elif not entries:
             print(f"清单为空（{OPEN_FILE}）")
         else:
             print(f"已打开会话清单（{OPEN_FILE}）")
-            print(f"快照时间: {open_taken_at() or '（未知）'}    共 {len(entries)} 条，最近在前\n")
+            print(f"快照时间: {open_taken_at() or '（未知）'}    共 {len(entries)} 条，最近在前")
+            if alive is None:
+                print("⚠ 枚举 claude.exe 失败/超时，下面状态未知（?）—— 稍后重试")
+            print()
             for e in entries:
-                mark = "运行中" if e["id"] in alive else "已关闭"
+                mark = "?" if alive is None else ("运行中" if e["id"] in alive else "已关闭")
                 print(f"  [{mark}] {e['id'][:8]}  {e.get('window', 'tab'):<4} "
                       f"打开于 {e.get('openedAt', '')}  {e.get('cwd', '')}")
                 if e.get("title"):
