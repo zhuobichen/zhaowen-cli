@@ -1128,7 +1128,10 @@ def snapshot_open():
     titles = {r["id"]: r.get("title", "") for r in scan_all("claude")}
     recs = [{"id": s["sessionId"], "agent": "claude", "cwd": s["cwd"],
              "title": titles.get(s["sessionId"], "")} for s in sessions]
-    entries = record_open(recs, replace=True)      # 真快照：覆盖旧清单
+    # 保留清单里已有的 Codex 条目：Codex 没有可靠的"存活"检测（app-server 会 touch
+    # 旧 rollout，误判成运行中），覆盖式快照会把上次手动加进来的 Codex 会话丢掉。
+    kept_codex = [s for s in load_open() if s.get("agent") == "codex"]
+    entries = record_open(recs + kept_codex, replace=True)   # 真快照：覆盖（Codex 保留）
     print(f"快照时间: {open_taken_at()}    共 {len(entries)} 个会话（清单已按此刻覆盖）")
     print(f"清单文件: {OPEN_FILE}\n")
     for e in entries:
