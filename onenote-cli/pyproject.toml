@@ -1,0 +1,19 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "onenote-local-mcp-server-cli"
+version = "1.0.0"
+description = "OneNote CLI - 命令行读写本地 OneNote 笔记本 (Windows only)"
+authors = [{name = "OneNote CLI"}]
+readme = "README.md"
+requires-python = ">=3.10"
+
+dependencies = [
+    "pythonnet>=3.0.0",
+    "lxml>=5.0.0",
+]
+
+[project.scripts]
+onenote = "onenote_cli:main"
