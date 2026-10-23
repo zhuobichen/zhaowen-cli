@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "winotes-cli"
+version = "0.1.0"
+description = "CLI tool for Windows Sticky Notes — AI-friendly command-line interface"
+readme = "README.md"
+license = { file = "LICENSE" }
+requires-python = ">=3.10"
+dependencies = ["winotes>=0.1.0"]
+classifiers = [
+    "Operating System :: Microsoft :: Windows",
+    "Programming Language :: Python :: 3",
+    "Environment :: Console",
+]
+
+[project.urls]
+Homepage = "https://github.com/zhuobichen/winnote-cli"
+
+[project.scripts]
+wn = "winotes_cli:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
