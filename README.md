@@ -10,6 +10,6 @@
 
 ## 收录说明
 
-- 2026-10 由 `OneNote-cli`、`winnote-cli`、`agent-dialog_management` 三库合并而成，**各自 git 历史完整保留**（`git log -- onenote-cli/` 等可查全部原始提交）。
+- 2026-10 由 `OneNote-cli`、`winnote-cli`、`agent-dialog_management` 三库合并而成，**各自 git 历史完整保留**（`git log --graph` 可见全部原始提交，各合并点第二父链即原仓库历史）。
 - `qchat-cli`、`server_manager` 保持独立仓库，不在本合集。
 - 后续新增小工具按同样模式追加子目录。
